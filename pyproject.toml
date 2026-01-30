@@ -1,0 +1,44 @@
+[project]
+name = "garmentiq"
+version = "0.0.4.8"
+authors = [
+  { name="Li Yuan", email="lyuan@gd.edu.kg" },
+  { name="Xinrui Zhai", email="zxr86272731@gmail.com" },
+  { name="Fangzhou Ma", email="fangzhou.ma029@gmail.com" },
+]
+maintainers = [
+  { name="Li Yuan", email="lyuan@gd.edu.kg" },
+  { name="Xinrui Zhai", email="zxr86272731@gmail.com" },
+  { name="Fangzhou Ma", email="fangzhou.ma029@gmail.com" },
+]
+description = "Automated Garment Measurement for Fashion Retail"
+readme = "README.md"
+requires-python = ">=3.11"
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: MIT License"
+]
+dependencies = [
+    "tqdm==4.67.1",
+    "pandas==2.2.2",
+    "numpy==2.0.0",
+    "torch==2.7.0",
+    "torchvision==0.22.0",
+    "scikit-learn==1.6.1",
+    "scipy==1.15.2",
+    "Pillow==11.1.0",
+    "matplotlib==3.10.0",
+    "transformers==4.50.3",
+    "kornia==0.8.0",
+    "timm==1.0.15",
+    "einops==0.8.1",
+    "shapely==2.1.1",
+    "opencv-python==4.11.0.86"
+]
+
+[project.urls]
+Homepage = "https://garmentiq.ly.gd.edu.kg/"
+Issues = "https://github.com/lygitdata/GarmentIQ/issues"
+
+[tool.setuptools.package-data]
+"garmentiq.instruction" = ["*.json"]
