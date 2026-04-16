@@ -42,4 +42,4 @@ Homepage = "https://garmentiq.ly.gd.edu.kg/"
 Issues = "https://github.com/lygitdata/GarmentIQ/issues"
 
 [tool.setuptools.package-data]
-"garmentiq.instruction" = ["*.json"]
+"garmentiq" = ["**/*.json"]
