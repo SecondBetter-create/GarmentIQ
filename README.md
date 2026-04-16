@@ -4,7 +4,11 @@
 
 **Free & Open Source. Precise and flexible garment measurements from images - no tape measures, no delays, just fashion - forward automation.**
 
+> 🎉 **Update (04/15/2026):** GarmentIQ now supports Segment Anything Models (SAM) for [segmentation](#segmentation), including SAM ViT base, SAM ViT large, and SAM ViT huge! Cheers! 🥂
+
 <img src="https://github.com/user-attachments/assets/b816c16b-bd33-4370-80b1-acc5df81cfcd" alt="GarmentIQ" width="600px"/>
+
+---
 
 **Content**: 
 
@@ -30,7 +34,7 @@
 
 ## What Are the Key Features of GarmentIQ?
 
-GarmentIQ uses computer vision and models like tinyViT, BiRefNet, and HRNet to classify garments, remove backgrounds, and detect key features with precision. It turns expert know-how into an intuitive measurement system - no intensive coding required. Fully modular and customizable, it adapts to your workflows while delivering fast, accurate results out of the box.
+GarmentIQ uses computer vision and models like DeiT, BiRefNet, SAM, and HRNet to classify garments, remove backgrounds, and detect key features with precision. It turns expert know-how into an intuitive measurement system - no intensive coding required. Fully modular and customizable, it adapts to your workflows while delivering fast, accurate results out of the box.
 
 | Feature | Web Demo | Video guide |
 |---------|----------|----------|
@@ -83,12 +87,12 @@ from garmentiq.classification.model_definition import tinyViT
 from garmentiq.landmark.detection.model_definition import PoseHighResolutionNet
 from garmentiq.garment_classes import garment_classes
 from garmentiq.landmark.derivation.derivation_dict import derivation_dict
+from garmentiq.segmentation.model_definition.birefnet import BiRefNet, load_birefnet_config
+from garmentiq.segmentation.model_definition.sam import SamModel, load_sam_config, load_sam_processor
 
-# Download 4 test images
-# cloth_1 and cloth_2 are short sleeve tops, cloth_3 is vest dress, cloth_4 is skirt
+# Download 3 test images
+# cloth_2 is short sleeve tops, cloth_3 is vest dress, cloth_4 is skirt
 !mkdir -p test_image
-!wget -q -O /content/test_image/cloth_1.jpg \
-    https://raw.githubusercontent.com/lygitdata/GarmentIQ/refs/heads/gh-pages/asset/img/cloth_1.jpg
 !wget -q -O /content/test_image/cloth_2.jpg \
     https://raw.githubusercontent.com/lygitdata/GarmentIQ/refs/heads/gh-pages/asset/img/cloth_2.jpg
 !wget -q -O /content/test_image/cloth_3.jpg \
@@ -105,11 +109,22 @@ from garmentiq.landmark.derivation.derivation_dict import derivation_dict
 !wget -q -O /content/models/hrnet.pth \
     https://huggingface.co/lygitdata/garmentiq/resolve/main/hrnet.pth
 
+# Download BiRefNet model
+!mkdir -p models/birefnet
+!wget -q -O /content/models/birefnet/model.safetensors \
+    https://huggingface.co/lygitdata/BiRefNet_garmentiq_backup/resolve/main/model.safetensors
+
+# Download SAM base model
+!mkdir -p models/sam_b
+!wget -q -O /content/models/sam_b/model.safetensors \
+    https://huggingface.co/facebook/sam-vit-base/resolve/main/model.safetensors
+
+# Example with BiRefNet model
 # Setup the tailor agent
-tailor = giq.tailor(
+tailor_biref = giq.tailor(
     input_dir="/content/test_image",
     model_dir="/content/models",
-    output_dir="/content/output",
+    output_dir="/content/output_biref",
     class_dict=garment_classes,
     do_derive=True,
     derivation_dict=derivation_dict,
@@ -124,14 +139,14 @@ tailor = giq.tailor(
         "normalize_mean": [0.8047, 0.7808, 0.7769],
         "normalize_std": [0.2957, 0.3077, 0.3081],
     },
-    segmentation_model_name="lygitdata/BiRefNet_garmentiq_backup",
+    segmentation_model_path="birefnet/model.safetensors",
+    segmentation_model_class=BiRefNet,
     segmentation_model_args={
-        "trust_remote_code": True,
+        "model_config": load_birefnet_config(),
         "resize_dim": (1024, 1024),
         "normalize_mean": [0.485, 0.456, 0.406],
         "normalize_std": [0.229, 0.224, 0.225],
-        "high_precision": True,
-        "background_color": [102, 255, 102],
+        "background_color": [102, 255, 102]
     },
     landmark_detection_model_path="hrnet.pth",
     landmark_detection_model_class=PoseHighResolutionNet(),
@@ -144,32 +159,107 @@ tailor = giq.tailor(
 )
 
 # See the tailor agent's basic information
-tailor.summary()
+tailor_biref.summary()
 
 # Start the measurement with refinement and derivation
-metadata, outputs = tailor.measure(save_segmentation_image=True, save_measurement_image=True)
-
+metadata, outputs = tailor_biref.measure(save_segmentation_image=True, save_measurement_image=True)
+     
 # See the metadata
 # It makes file access much easier
 print(metadata)
      
 # Plot the masks
-# Go to /content/output/mask_image/ to see the high resolution images
+# Go to /content/output_biref/mask_image/ to see the high resolution images
 for image in metadata['mask_image']:
   giq.landmark.plot(image_path=image, figsize=(3, 3))
      
 # Plot the background modified images
-# Go to /content/output/bg_modified_image to see the high resolution images
+# Go to /content/output_biref/bg_modified_image to see the high resolution images
 for image in metadata['bg_modified_image']:
   giq.landmark.plot(image_path=image, figsize=(3, 3))
      
 # Plot the images with desired landmarks
-# Go to /content/output/measurement_image/ to see the high resolution images
+# Go to /content/output_biref/measurement_image/ to see the high resolution images
 for image in metadata['measurement_image']:
   giq.landmark.plot(image_path=image, figsize=(3, 3))
      
 # See the measurement results in JSON format
-# Go to /content/output/measurement_json/ to see the JSON files
+# Go to /content/output_biref/measurement_json/ to see the JSON files
+import json
+
+for json_path in metadata['measurement_json']:
+    with open(json_path, 'r') as file:
+        data = json.load(file)
+        print(f"{json_path}:\n")
+        print(json.dumps(data, indent=4, sort_keys=True))
+        print("\n\n")
+
+# Example with SAM base model
+
+# Setup the tailor agent
+tailor_sam = giq.tailor(
+    input_dir="/content/test_image",
+    model_dir="/content/models",
+    output_dir="/content/output_sam",
+    class_dict=garment_classes,
+    do_derive=True,
+    derivation_dict=derivation_dict,
+    do_refine=False,
+    classification_model_path="tiny_vit_inditex_finetuned.pt",
+    classification_model_class=tinyViT,
+    classification_model_args={
+        "num_classes": len(list(garment_classes.keys())),
+        "img_size": (120, 184),
+        "patch_size": 6,
+        "resize_dim": (120, 184),
+        "normalize_mean": [0.8047, 0.7808, 0.7769],
+        "normalize_std": [0.2957, 0.3077, 0.3081],
+    },
+    segmentation_model_path="sam_b/model.safetensors",
+    segmentation_model_class=SamModel,
+    segmentation_model_args={
+        "model_config": {"config": load_sam_config("sam-vit-b")},
+        "processor": load_sam_processor("sam-vit-b", use_fast=False),
+        "input_points": [[[1000, 900]]],
+        "background_color": [102, 255, 102]
+    },
+    landmark_detection_model_path="hrnet.pth",
+    landmark_detection_model_class=PoseHighResolutionNet(),
+    landmark_detection_model_args={
+        "scale_std": 200.0,
+        "resize_dim": [288, 384],
+        "normalize_mean": [0.485, 0.456, 0.406],
+        "normalize_std": [0.229, 0.224, 0.225],
+    },
+)
+
+# See the tailor agent's basic information
+tailor_sam.summary()
+     
+# Start the measurement with refinement and derivation
+metadata, outputs = tailor_sam.measure(save_segmentation_image=True, save_measurement_image=True)
+     
+# See the metadata
+# It makes file access much easier
+print(metadata)
+     
+# Plot the masks
+# Go to /content/output_sam/mask_image/ to see the high resolution images
+for image in metadata['mask_image']:
+  giq.landmark.plot(image_path=image, figsize=(3, 3))
+
+# Plot the background modified images
+# Go to /content/output_sam/bg_modified_image to see the high resolution images
+for image in metadata['bg_modified_image']:
+  giq.landmark.plot(image_path=image, figsize=(3, 3))   
+
+# Plot the images with desired landmarks
+# Go to /content/output_sam/measurement_image/ to see the high resolution images
+for image in metadata['measurement_image']:
+  giq.landmark.plot(image_path=image, figsize=(3, 3))
+     
+# See the measurement results in JSON format
+# Go to /content/output_sam/measurement_json/ to see the JSON files
 import json
 
 for json_path in metadata['measurement_json']:
@@ -263,40 +353,83 @@ print(
 
 ```python
 import garmentiq as giq
-
+from garmentiq.segmentation.model_definition.birefnet import BiRefNet, load_birefnet_config
+from garmentiq.segmentation.model_definition.sam import SamModel, load_sam_config, load_sam_processor
+     
 # Download a test image
 !mkdir -p test_image
 !wget -q -O /content/test_image/cloth_1.jpg \
     https://raw.githubusercontent.com/lygitdata/GarmentIQ/refs/heads/gh-pages/asset/img/cloth_1.jpg
 
-# Load the pretrained model from Hugging Face
-BiRefNet = giq.segmentation.load_model(
-    pretrained_model='lygitdata/BiRefNet_garmentiq_backup',
-    pretrained_model_args={'trust_remote_code': True},
-    high_precision=True
+# Download BiRefNet model
+!mkdir -p /content/models/birefnet
+
+!wget -q -O /content/models/birefnet/model.safetensors \
+    https://huggingface.co/lygitdata/BiRefNet_garmentiq_backup/resolve/main/model.safetensors
+
+# Download SAM base model
+!mkdir -p /content/models/sam_b
+
+!wget -q -O /content/models/sam_b/model.safetensors \
+    https://huggingface.co/facebook/sam-vit-base/resolve/main/model.safetensors
+     
+#Example with BiRefNet model
+# Load the BiRefNet model
+birefnet = giq.segmentation.load_model(
+    model_class=BiRefNet,
+    model_path="/content/models/birefnet/model.safetensors",
+    model_args=load_birefnet_config()
 )
 
 # Extract the mask
-original_img, mask = giq.segmentation.extract(
-    model=BiRefNet,
+original_img_biref, mask_biref = giq.segmentation.extract(
+    model=birefnet,
     image_path='/content/test_image/cloth_1.jpg',
+    # BiRefNet specific kwargs:
     resize_dim=(1024, 1024),
     normalize_mean=[0.485, 0.456, 0.406],
-    normalize_std=[0.229, 0.224, 0.225],
-    high_precision=True
+    normalize_std=[0.229, 0.224, 0.225]
 )
 
 # Change background color
-bg_modified_img = giq.segmentation.change_background_color(
-    image_np=original_img,
-    mask_np=mask,
+bg_modified_img_biref = giq.segmentation.change_background_color(
+    image_np=original_img_biref,
+    mask_np=mask_biref,
     background_color=[102, 255, 102]
 )
 
 # Plot the original image, mask, and background modified image
-giq.segmentation.plot(image_np=original_img, figsize=(3, 3))
-giq.segmentation.plot(image_np=mask, figsize=(3, 3))
-giq.segmentation.plot(image_np=bg_modified_img, figsize=(3, 3))
+giq.segmentation.plot(image_np=original_img_biref, figsize=(3, 3))
+giq.segmentation.plot(image_np=mask_biref, figsize=(3, 3))
+giq.segmentation.plot(image_np=bg_modified_img_biref, figsize=(3, 3))
+     
+# Example with SAM Base model
+# Load the BiRefNet model
+sam = giq.segmentation.load_model(
+    model_class=SamModel,
+    model_path="/content/models/sam_b/model.safetensors",
+    model_args={"config": load_sam_config("sam-vit-b")}
+)
+
+# Extract the mask
+original_img_sam, mask_sam = giq.segmentation.extract(
+    model=sam,
+    image_path='/content/test_image/cloth_1.jpg',
+    processor=load_sam_processor("sam-vit-b"),
+    input_points=[[[512, 512]]]
+)
+
+# Change background color
+bg_modified_img_sam = giq.segmentation.change_background_color(
+    image_np=original_img_sam,
+    mask_np=mask_sam,
+    background_color=[102, 255, 102]
+)
+
+# Plot the original image, mask, and background modified image
+giq.segmentation.plot(image_np=original_img_sam, figsize=(3, 3))
+giq.segmentation.plot(image_np=mask_sam, figsize=(3, 3))
+giq.segmentation.plot(image_np=bg_modified_img_sam, figsize=(3, 3))
 ```
 
 ### Landmark detection
@@ -352,19 +485,26 @@ Note that segmentation mask is erquired for landmark refinement and derivation a
 import garmentiq as giq
 from garmentiq.landmark.detection.model_definition import PoseHighResolutionNet
 from garmentiq.garment_classes import garment_classes
+from garmentiq.segmentation.model_definition.birefnet import BiRefNet, load_birefnet_config
      
-# Download a vest dress image and a pretrained model
+# Download a vest dress image
 !mkdir -p test_image
 !wget -q -O /content/test_image/cloth_3.jpg \
     https://raw.githubusercontent.com/lygitdata/GarmentIQ/refs/heads/gh-pages/asset/img/cloth_3.jpg
 
+# Download HRNet model
 !mkdir -p models
 !wget -q -O /content/models/hrnet.pth \
     https://huggingface.co/lygitdata/garmentiq/resolve/main/hrnet.pth
+
+# Download BiRefNet model
+!mkdir -p /content/models/birefnet
+!wget -q -O /content/models/birefnet/model.safetensors \
+    https://huggingface.co/lygitdata/BiRefNet_garmentiq_backup/resolve/main/model.safetensors
      
 # Plot the image
 giq.landmark.plot(image_path="/content/test_image/cloth_3.jpg", figsize=(3, 3))
-
+     
 # Load the pretrained model from Hugging Face
 HRNet = giq.landmark.detection.load_model(
     model_path="/content/models/hrnet.pth",
@@ -388,18 +528,21 @@ giq.landmark.plot(image_path="/content/test_image/cloth_3.jpg", coordinate=coord
      
 # Segmentation mask is required for refinement and derivation
 # So we need to do segmentation first
-BiRefNet = giq.segmentation.load_model(
-    pretrained_model='lygitdata/BiRefNet_garmentiq_backup',
-    pretrained_model_args={'trust_remote_code': True},
-    high_precision=True
+# Load the BiRefNet model
+birefnet = giq.segmentation.load_model(
+    model_class=BiRefNet,
+    model_path="/content/models/birefnet/model.safetensors",
+    model_args=load_birefnet_config()
 )
+
+# Extract the mask
 original_img, mask = giq.segmentation.extract(
-    model=BiRefNet,
+    model=birefnet,
     image_path='/content/test_image/cloth_3.jpg',
+    # BiRefNet specific kwargs:
     resize_dim=(1024, 1024),
     normalize_mean=[0.485, 0.456, 0.406],
-    normalize_std=[0.229, 0.224, 0.225],
-    high_precision=True
+    normalize_std=[0.229, 0.224, 0.225]
 )
      
 # Refine the landmarks
@@ -413,6 +556,7 @@ refined_coords, refined_detection_dict = giq.landmark.refine(
     ksize=(11, 11),
     sigmaX=0.0
 )
+
 # Print the original coordinates and the refined coordinates
 print("Original coordinates:\n", coords)
 print("Refined coordinates:\n", refined_coords)
@@ -427,7 +571,6 @@ derived_coords, derived_detection_dict = giq.landmark.derive(
 )
      
 import numpy as np
-
 # Plot the derived point
 giq.landmark.plot(
     image_path="/content/test_image/cloth_3.jpg",
@@ -894,12 +1037,13 @@ GarmentIQ's Python API code is licensed under the MIT License.
 
 ## Acknowledgements
 
-We sincerely thank [Adrian Gonzalez-Sieira](https://github.com/gonzalezsieira) and [Laura Rodriguez-Barreiro](https://github.com/laurarbar) from Inditex for their invaluable suggestions and continuous support throughout this research. We are also grateful to everyone at ETH Zürich and the ETH AI Center for their coordination and collaborative efforts.
+We sincerely thank Adrian Gonzalez-Sieira and Laura Rodriguez-Barreiro from INDITEX for their invaluable suggestions and continuous support throughout this research. We are also grateful to everyone at ETH Zurich and the ETH AI Center for their coordination and collaborative efforts.
 
 We gratefully acknowledge the use and adaptation of the following open-source resources:
 
 - https://github.com/facebookresearch/deit
 - https://github.com/ZhengPeng7/BiRefNet
+- https://github.com/facebookresearch/segment-anything
 - https://github.com/svip-lab/HRNet-for-Fashion-Landmark-Estimation.PyTorch
 - https://github.com/switchablenorms/DeepFashion2
 - https://www.kaggle.com/datasets/paramaggarwal/fashion-product-images-dataset

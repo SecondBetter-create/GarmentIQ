@@ -31,7 +31,8 @@ class tailor:
         classification_model_path (str): Path to the classification model.
         classification_model_class (Type[nn.Module]): Class definition for the classification model.
         classification_model_args (Dict): Arguments for the classification model.
-        segmentation_model_name (str): Name or path for the segmentation model.
+        segmentation_model_path (str): Name or path for the segmentation model.
+        segmentation_model_class (Type[nn.Module]): Class definition for the segmentation model.
         segmentation_model_args (Dict): Arguments for the segmentation model.
         landmark_detection_model_path (str): Path to the landmark detection model.
         landmark_detection_model_class (Type[nn.Module]): Class definition for the landmark detection model.
@@ -51,7 +52,8 @@ class tailor:
         classification_model_path: str,
         classification_model_class: Type[nn.Module],
         classification_model_args: Dict,
-        segmentation_model_name: str,
+        segmentation_model_path: str,
+        segmentation_model_class: Type[nn.Module],
         segmentation_model_args: Dict,
         landmark_detection_model_path: str,
         landmark_detection_model_class: Type[nn.Module],
@@ -73,7 +75,8 @@ class tailor:
             classification_model_path (str): The filename or relative path to the classification model.
             classification_model_class (Type[nn.Module]): The Python class of the classification model.
             classification_model_args (Dict): A dictionary of arguments to initialize the classification model.
-            segmentation_model_name (str): The name or path of the pretrained segmentation model.
+            segmentation_model_path (str): The filename or relative path of the segmentation model.
+            segmentation_model_class (Type[nn.Module]): The Python class of the segmentation model.
             segmentation_model_args (Dict): A dictionary of arguments for the segmentation model.
             landmark_detection_model_path (str): The filename or relative path to the landmark detection model.
             landmark_detection_model_class (Type[nn.Module]): The Python class of the landmark detection model.
@@ -123,7 +126,7 @@ class tailor:
         filtered_model_args = {
             k: v
             for k, v in self.classification_model_args.items()
-            if k not in ("resize_dim", "normalize_mean", "normalize_std")
+            if k not in ("pretrained", "resize_dim", "normalize_mean", "normalize_std")
         }
 
         # Load the model using the filtered arguments
@@ -134,15 +137,14 @@ class tailor:
         )
 
         # Segmentation model setup
-        self.segmentation_model_name = segmentation_model_name
+        self.segmentation_model_path = segmentation_model_path
+        self.segmentation_model_class = segmentation_model_class
         self.segmentation_model_args = segmentation_model_args
         self.segmentation_has_bg_color = "background_color" in segmentation_model_args
         self.segmentation_model = segmentation.load_model(
-            pretrained_model=self.segmentation_model_name,
-            pretrained_model_args={
-                "trust_remote_code": segmentation_model_args["trust_remote_code"]
-            },
-            high_precision=segmentation_model_args["high_precision"],
+            model_path=f"{self.model_dir}/{self.segmentation_model_path}",
+            model_class=self.segmentation_model_class,
+            model_args=self.segmentation_model_args.get("model_config")
         )
 
         # Landmark detection model setup
@@ -192,7 +194,7 @@ class tailor:
         print(
             f"{'Classification Model:':25} {self.classification_model_class.__name__}"
         )
-        print(f"{'Segmentation Model:':25} {self.segmentation_model_name}")
+        print(f"{'Segmentation Model:':25} {self.segmentation_model_class.__name__}")
         print(f"{'  └─ Change BG color?:':25} {self.segmentation_has_bg_color}")
         print(
             f"{'Landmark Detection Model:':25} {self.landmark_detection_model_class.__class__.__name__}"
@@ -227,26 +229,38 @@ class tailor:
         """
         Segments a single garment image to extract its mask and optionally modifies the background color.
 
+        This method acts as an intelligent router for your segmentation arguments. It automatically 
+        filters out initialization keys (e.g., `model_config`) and post-processing keys 
+        (e.g., `background_color`) from `self.segmentation_model_args`. The remaining arguments 
+        (such as `processor` and `input_points` for SAM or `resize_dim` for standard models such as BiRefNet) 
+        are dynamically passed into the extraction pipeline.
+
         Args:
             image (str): The filename of the image to segment, located in `self.input_dir`.
 
         Returns:
             tuple:
-                - original_img (np.ndarray): The original image with the mask overlaid.
-                - mask (np.ndarray): The binary segmentation mask.
-                - bg_modified_img (np.ndarray, optional): The image with the background color changed,
-                                                         returned only if `background_color` is specified
-                                                         in `segmentation_model_args`.
+                - original_img (np.ndarray): The original input image converted to a numpy array.
+                - mask (np.ndarray): The extracted binary segmentation mask as a numpy array.
+                - bg_modified_img (np.ndarray, optional): The image with the background color replaced. 
+                                                          This third element is only returned if 
+                                                          `background_color` is provided in the 
+                                                          segmentation arguments.
         """
+        # 1. Filter out initialization and post-processing arguments
+        extraction_kwargs = {
+            k: v for k, v in self.segmentation_model_args.items()
+            if k not in ["model_config", "background_color"]
+        }
+
+        # 2. Extract using the unified function and unpacked kwargs
         original_img, mask = segmentation.extract(
             model=self.segmentation_model,
             image_path=f"{self.input_dir}/{image}",
-            resize_dim=self.segmentation_model_args.get("resize_dim"),
-            normalize_mean=self.segmentation_model_args.get("normalize_mean"),
-            normalize_std=self.segmentation_model_args.get("normalize_std"),
-            high_precision=self.segmentation_model_args.get("high_precision"),
+            **extraction_kwargs
         )
 
+        # 3. Handle optional background color modification
         background_color = self.segmentation_model_args.get("background_color")
 
         if background_color is None:

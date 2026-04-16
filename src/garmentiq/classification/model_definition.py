@@ -186,7 +186,13 @@ class tinyViT(nn.Module):
         backbone (nn.Module): The underlying vision transformer model with modified head.
     """
 
-    def __init__(self, num_classes, img_size, patch_size):
+    def __init__(
+        self, 
+        num_classes: int, 
+        img_size: int, 
+        patch_size: int, 
+        pretrained: bool = False,
+    ):
         """
         Initializes the tinyViT model with a pretrained DeiT backbone.
 
@@ -194,11 +200,12 @@ class tinyViT(nn.Module):
             num_classes (int): Number of target classes.
             img_size (int): Input image size (height and width).
             patch_size (int): Patch size for the transformer.
+            pretrained (bool): Whether to use the pretrained model, deault to `False`.
         """
         super(tinyViT, self).__init__()
         self.backbone = timm.create_model(
             "deit_tiny_patch16_224",
-            pretrained=True,
+            pretrained=pretrained,
             img_size=img_size,
             patch_size=patch_size,
         )
